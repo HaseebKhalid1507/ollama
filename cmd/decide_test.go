@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"io"
@@ -10,8 +9,6 @@ import (
 	"os"
 	"strings"
 	"testing"
-
-	"github.com/spf13/cobra"
 
 	"github.com/ollama/ollama/api"
 	"github.com/ollama/ollama/types/model"
@@ -35,16 +32,11 @@ func runDecide(t *testing.T, stdin string, args []string, handler http.HandlerFu
 	t.Setenv("OLLAMA_HOST", mockServer.URL)
 	t.Cleanup(mockServer.Close)
 
-	cmd := &cobra.Command{}
+	cmd, _, err := NewCLI().Find([]string{"run"})
+	if err != nil {
+		t.Fatal(err)
+	}
 	cmd.SetContext(t.Context())
-	cmd.Flags().String("keepalive", "", "")
-	cmd.Flags().Bool("verbose", false, "")
-	cmd.Flags().Bool("insecure", false, "")
-	cmd.Flags().Bool("nowordwrap", false, "")
-	cmd.Flags().String("format", "", "")
-	cmd.Flags().String("runner", "", "")
-	cmd.Flags().String("think", "", "")
-	cmd.Flags().Bool("hidethinking", false, "")
 	for _, flag := range flags {
 		name, value, _ := strings.Cut(flag, "=")
 		if err := cmd.Flags().Set(name, value); err != nil {
@@ -52,18 +44,17 @@ func runDecide(t *testing.T, stdin string, args []string, handler http.HandlerFu
 		}
 	}
 
-	oldStdin, oldStdout := os.Stdin, os.Stdout
+	oldStdin := os.Stdin
 	stdinR, stdinW, _ := os.Pipe()
+	defer stdinR.Close()
 	_, _ = io.WriteString(stdinW, stdin)
 	stdinW.Close()
-	stdoutR, stdoutW, _ := os.Pipe()
-	os.Stdin, os.Stdout = stdinR, stdoutW
-	err := RunHandler(cmd, append([]string{"nimble"}, args...))
-	stdoutW.Close()
-	os.Stdin, os.Stdout = oldStdin, oldStdout
-	var out bytes.Buffer
-	_, _ = io.Copy(&out, stdoutR)
-	return out.String(), err
+	os.Stdin = stdinR
+	defer func() { os.Stdin = oldStdin }()
+	out := captureStdout(t, func() {
+		err = RunHandler(cmd, append([]string{"nimble"}, args...))
+	})
+	return out, err
 }
 
 func TestRunDecisionModel(t *testing.T) {
@@ -101,6 +92,7 @@ func TestRunDecisionModel(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var got struct {
 				Model     string          `json:"model"`
+				Runner    string          `json:"runner"`
 				State     string          `json:"state"`
 				Questions json.RawMessage `json:"questions"`
 			}
@@ -109,11 +101,11 @@ func TestRunDecisionModel(t *testing.T) {
 					t.Error(err)
 				}
 				_, _ = io.WriteString(w, `{"model":"nimble","answers":`+tt.answers+`}`)
-			})
+			}, "runner=llamacpp")
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got.Model != "nimble" || got.State != "I was charged twice" || string(got.Questions) != tt.questions {
+			if got.Model != "nimble" || got.Runner != "llamacpp" || got.State != "I was charged twice" || string(got.Questions) != tt.questions {
 				t.Fatalf("unexpected request: %+v", got)
 			}
 			if out != tt.want {
@@ -128,24 +120,6 @@ func TestRunDecisionModel(t *testing.T) {
 	}, "format=json")
 	if err != nil || out != response+"\n" {
 		t.Fatalf("json output = %q, %v", out, err)
-	}
-}
-
-func TestRunDecisionModelRunner(t *testing.T) {
-	var got struct {
-		Runner string `json:"runner"`
-	}
-	_, err := runDecide(t, "", []string{"hello", "Is this urgent?"}, func(w http.ResponseWriter, r *http.Request) {
-		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
-			t.Error(err)
-		}
-		_, _ = io.WriteString(w, `{"model":"nimble","answers":{"Is this urgent?":{"type":"noul","noul":0.9}}}`)
-	}, "runner=llamacpp")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.Runner != "llamacpp" {
-		t.Fatalf("runner = %q, want llamacpp", got.Runner)
 	}
 }
 

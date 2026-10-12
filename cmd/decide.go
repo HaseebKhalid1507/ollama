@@ -28,35 +28,31 @@ func runDecision(cmd *cobra.Command, opts runOptions, args []string, interactive
 		return fmt.Errorf("%s answers questions about text, e.g. ollama run %s \"My order never arrived\" \"Is this urgent?\"", opts.Model, opts.Model)
 	}
 
-	text := args[0]
-	var images []api.ImageData
+	input := api.Message{Role: "user", Content: args[0]}
 	if opts.MultiModal {
 		var err error
-		text, images, err = extractFileData(text)
+		input.Content, input.Images, err = extractFileData(input.Content)
 		if err != nil {
 			return err
 		}
 	}
-	return decide(cmd, opts, text, images, args[1:]...)
+	return decide(cmd, opts, input, args[1:]...)
 }
 
 // decide asks a decision model yes/no questions about text and prints the
 // likelier answer to each with its probability.
-func decide(cmd *cobra.Command, opts runOptions, text string, images []api.ImageData, questions ...string) error {
+func decide(cmd *cobra.Command, opts runOptions, input api.Message, questions ...string) error {
 	client, err := api.ClientFromEnvironment()
 	if err != nil {
 		return err
 	}
 	// Piped text and multiline messages end in a newline that isn't part of the text.
-	state, err := json.Marshal(strings.TrimRight(text, "\r\n"))
-	if err != nil {
-		return err
-	}
+	state, _ := json.Marshal(strings.TrimRight(input.Content, "\r\n"))
 	req := &api.SystemOneRequest{
 		Model:     opts.Model,
 		Runner:    opts.Runner,
 		State:     state,
-		Images:    images,
+		Images:    input.Images,
 		Questions: &api.SystemOneQuestions{},
 		KeepAlive: opts.KeepAlive,
 	}
