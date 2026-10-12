@@ -42,6 +42,7 @@ func runDecide(t *testing.T, stdin string, args []string, handler http.HandlerFu
 	cmd.Flags().Bool("insecure", false, "")
 	cmd.Flags().Bool("nowordwrap", false, "")
 	cmd.Flags().String("format", "", "")
+	cmd.Flags().String("runner", "", "")
 	cmd.Flags().String("think", "", "")
 	cmd.Flags().Bool("hidethinking", false, "")
 	for _, flag := range flags {
@@ -127,6 +128,24 @@ func TestRunDecisionModel(t *testing.T) {
 	}, "format=json")
 	if err != nil || out != response+"\n" {
 		t.Fatalf("json output = %q, %v", out, err)
+	}
+}
+
+func TestRunDecisionModelRunner(t *testing.T) {
+	var got struct {
+		Runner string `json:"runner"`
+	}
+	_, err := runDecide(t, "", []string{"hello", "Is this urgent?"}, func(w http.ResponseWriter, r *http.Request) {
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Error(err)
+		}
+		_, _ = io.WriteString(w, `{"model":"nimble","answers":{"Is this urgent?":{"type":"noul","noul":0.9}}}`)
+	}, "runner=llamacpp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Runner != "llamacpp" {
+		t.Fatalf("runner = %q, want llamacpp", got.Runner)
 	}
 }
 

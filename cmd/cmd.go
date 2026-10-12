@@ -972,22 +972,6 @@ func RunHandler(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	audioCapable := slices.Contains(info.Capabilities, model.CapabilityAudio)
-	opts.MultiModal = slices.Contains(info.Capabilities, model.CapabilityVision) || audioCapable
-
-	// TODO: remove the projector info and vision info checks below,
-	// these are left in for backwards compatibility with older servers
-	// that don't have the capabilities field in the model info
-	if len(info.ProjectorInfo) != 0 {
-		opts.MultiModal = true
-	}
-	for k := range info.ModelInfo {
-		if strings.Contains(k, ".vision.") {
-			opts.MultiModal = true
-			break
-		}
-	}
-
 	applyShowResponseToRunOptions(&opts, info)
 
 	if slices.Contains(info.Capabilities, model.CapabilityDecision) {
@@ -1888,6 +1872,19 @@ func (r runOptions) Copy() runOptions {
 func applyShowResponseToRunOptions(opts *runOptions, info *api.ShowResponse) {
 	opts.ParentModel = info.Details.ParentModel
 	opts.LoadedMessages = slices.Clone(info.Messages)
+	opts.MultiModal = slices.Contains(info.Capabilities, model.CapabilityVision) ||
+		slices.Contains(info.Capabilities, model.CapabilityAudio)
+
+	// Keep media input working with older servers that do not report capabilities.
+	if len(info.ProjectorInfo) != 0 {
+		opts.MultiModal = true
+	}
+	for key := range info.ModelInfo {
+		if strings.Contains(key, ".vision.") {
+			opts.MultiModal = true
+			break
+		}
+	}
 }
 
 type displayResponseState struct {
@@ -2367,18 +2364,6 @@ func launchInteractiveModel(cmd *cobra.Command, modelName string) error {
 	opts.Think, err = inferThinkingOption(&info.Capabilities, &opts, false)
 	if err != nil {
 		return err
-	}
-
-	audioCapable := slices.Contains(info.Capabilities, model.CapabilityAudio)
-	opts.MultiModal = slices.Contains(info.Capabilities, model.CapabilityVision) || audioCapable
-	if len(info.ProjectorInfo) != 0 {
-		opts.MultiModal = true
-	}
-	for key := range info.ModelInfo {
-		if strings.Contains(key, ".vision.") {
-			opts.MultiModal = true
-			break
-		}
 	}
 
 	applyShowResponseToRunOptions(&opts, info)

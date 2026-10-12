@@ -54,6 +54,7 @@ func decide(cmd *cobra.Command, opts runOptions, text string, images []api.Image
 	}
 	req := &api.SystemOneRequest{
 		Model:     opts.Model,
+		Runner:    opts.Runner,
 		State:     state,
 		Images:    images,
 		Questions: &api.SystemOneQuestions{},

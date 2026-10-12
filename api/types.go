@@ -605,6 +605,7 @@ type Runner struct {
 // decision model typed questions about a state.
 type SystemOneRequest struct {
 	Model     string              `json:"model"`
+	Runner    string              `json:"runner,omitempty"`
 	State     json.RawMessage     `json:"state"`
 	Images    []ImageData         `json:"images,omitempty"`
 	Videos    []json.RawMessage   `json:"videos,omitempty"`
